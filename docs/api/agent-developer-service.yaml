@@ -1,0 +1,346 @@
+openapi: "3.1.0"
+info:
+  title: Agent Developer Service API
+  description: |
+    Custom AI agent design studio, generation, registry, deployment, versioning, and MEE integration.
+    SRS requirements: AGT-001 through AGT-007
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8011/api/v1
+
+tags:
+  - name: agents
+  - name: registry
+  - name: deployment
+  - name: versioning
+
+paths:
+
+  /agents:
+    get:
+      tags: [registry]
+      summary: "AGT-003: List all agents in the registry"
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [draft, testing, deployed, deprecated]
+        - in: query
+          name: owner_id
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Agent registry
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Agent'
+
+  /agents/design:
+    post:
+      tags: [agents]
+      summary: "AGT-001: Open agent design studio — define goals, capabilities, and rules"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentDesignRequest'
+      responses:
+        "201":
+          description: Agent design created (draft)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+
+  /agents/generate:
+    post:
+      tags: [agents]
+      summary: "AGT-002: Generate agent from NL spec or design"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                agent_id:
+                  type: string
+                  format: uuid
+                  description: Generate from an existing design
+                natural_language_spec:
+                  type: string
+                  description: Generate from a NL description (creates a new design first)
+                template_id:
+                  type: string
+                  format: uuid
+      responses:
+        "202":
+          description: Agent generation job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIJobReference'
+
+  /agents/{agent_id}:
+    get:
+      tags: [registry]
+      summary: "AGT-003: Get agent detail from registry"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        "200":
+          description: Agent detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+    put:
+      tags: [agents]
+      summary: Update agent design
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentDesignRequest'
+      responses:
+        "200":
+          description: Updated agent
+
+  /agents/{agent_id}/deploy:
+    post:
+      tags: [deployment]
+      summary: "AGT-004: Deploy agent to a project workflow or CI/CD pipeline"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentDeployRequest'
+      responses:
+        "202":
+          description: Deployment triggered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentDeployment'
+
+  /agents/{agent_id}/test:
+    post:
+      tags: [agents]
+      summary: "AGT-006: Run test suites against agent before deployment"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        "202":
+          description: Test run started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIJobReference'
+
+  /agents/{agent_id}/versions:
+    get:
+      tags: [versioning]
+      summary: "AGT-005: Get version history for an agent"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        "200":
+          description: Version list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgentVersion'
+
+  /agents/{agent_id}/rollback/{version}:
+    post:
+      tags: [versioning]
+      summary: "AGT-005: Roll back agent to a previous version"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Rollback triggered
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    AgentId:
+      name: agent_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    Agent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        owner_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [draft, generating, testing, deployed, deprecated]
+        capabilities:
+          type: array
+          items:
+            type: string
+        tools:
+          type: array
+          items:
+            type: string
+        behavioral_rules:
+          type: array
+          items:
+            type: string
+        version:
+          type: integer
+        docker_image:
+          type: string
+          nullable: true
+        mee_enabled:
+          type: boolean
+          default: true
+          description: AGT-007 — all agent actions tracked by MEE
+        created_at:
+          type: string
+          format: date-time
+
+    AgentDesignRequest:
+      type: object
+      required: [name, goals]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        goals:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        tools:
+          type: array
+          items:
+            type: string
+        behavioral_rules:
+          type: array
+          items:
+            type: string
+
+    AgentDeployRequest:
+      type: object
+      required: [project_id, target]
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        target:
+          type: string
+          enum: [workflow, cicd_pipeline, monitoring]
+        pipeline_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    AgentDeployment:
+      type: object
+      properties:
+        deployment_id:
+          type: string
+          format: uuid
+        agent_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, running, deployed, failed]
+        kubernetes_pod:
+          type: string
+          nullable: true
+        deployed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    AgentVersion:
+      type: object
+      properties:
+        version:
+          type: integer
+        docker_image:
+          type: string
+        changelog:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        is_current:
+          type: boolean
+
+    AIJobReference:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string

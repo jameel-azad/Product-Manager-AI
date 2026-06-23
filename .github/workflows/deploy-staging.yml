@@ -1,0 +1,76 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  K8S_NAMESPACE: platform
+  ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+
+jobs:
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    environment: staging
+    concurrency:
+      group: staging-deploy
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+
+      - name: Update image tags
+        run: |
+          SHA=${{ github.sha }}
+          for service in auth-service project-service requirement-service design-service \
+              ai-orchestration-service test-management-service devops-service mee-service \
+              analytics-service notification-service agent-developer-service \
+              legacy-conversion-service business-extraction-service; do
+            kubectl set image deployment/$service \
+              $service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/$service:sha-${SHA:0:7} \
+              -n ${{ env.K8S_NAMESPACE }}
+          done
+
+      - name: Wait for rollout
+        run: |
+          for service in auth-service project-service requirement-service design-service \
+              ai-orchestration-service test-management-service devops-service mee-service \
+              analytics-service notification-service agent-developer-service \
+              legacy-conversion-service business-extraction-service; do
+            kubectl rollout status deployment/$service -n ${{ env.K8S_NAMESPACE }} --timeout=5m
+          done
+
+      - name: Run smoke tests
+        run: |
+          for port in 8001 8002 8003 8004 8005 8006 8007 8008 8009 8010 8011 8012 8013; do
+            kubectl run smoke-test-$port --image=curlimages/curl --restart=Never \
+              --command -- curl -f http://service-$port:$port/health || true
+          done
+
+      - name: Notify Slack on success
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {"text": "✅ Staging deploy succeeded — ${{ github.sha }}"}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {"text": "❌ Staging deploy FAILED — ${{ github.sha }} — check GitHub Actions"}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

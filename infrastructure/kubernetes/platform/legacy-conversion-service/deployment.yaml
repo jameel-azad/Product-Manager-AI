@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legacy-conversion-service
+  namespace: platform
+  labels:
+    app: legacy-conversion-service
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: legacy-conversion-service
+  template:
+    metadata:
+      labels:
+        app: legacy-conversion-service
+    spec:
+      containers:
+        - name: legacy-conversion-service
+          image: xccelera/legacy-conversion-service:latest
+          ports:
+            - containerPort: 8012
+          envFrom:
+            - secretRef:
+                name: legacy-conversion-service-secrets
+            - configMapRef:
+                name: platform-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8012
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8012
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: legacy-conversion-service
+  namespace: platform
+spec:
+  selector:
+    app: legacy-conversion-service
+  ports:
+    - port: 8012
+      targetPort: 8012
+      protocol: TCP
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: legacy-conversion-service-hpa
+  namespace: platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: legacy-conversion-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

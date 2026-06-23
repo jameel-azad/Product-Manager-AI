@@ -1,0 +1,116 @@
+# Kafka Topic Configuration
+# Apply with: kafka-topics.sh --bootstrap-server localhost:9092 --create ...
+
+topics:
+
+  # ── AI Job Lifecycle ──────────────────────────────────────────────────────
+  - name: ai.jobs.created
+    partitions: 12
+    replication_factor: 3
+    config:
+      retention.ms: 604800000   # 7 days
+      cleanup.policy: delete
+
+  - name: ai.jobs.completed
+    partitions: 12
+    replication_factor: 3
+    config:
+      retention.ms: 604800000
+
+  - name: ai.jobs.failed
+    partitions: 6
+    replication_factor: 3
+    config:
+      retention.ms: 2592000000  # 30 days (dead-letter)
+
+  # ── Per-Engine Job Queues ─────────────────────────────────────────────────
+  - name: apix.jobs
+    partitions: 6
+    replication_factor: 3
+    config:
+      retention.ms: 86400000
+
+  - name: uix.jobs
+    partitions: 6
+    replication_factor: 3
+    config:
+      retention.ms: 86400000
+
+  - name: integrationx.jobs
+    partitions: 4
+    replication_factor: 3
+    config:
+      retention.ms: 86400000
+
+  - name: mobile.jobs
+    partitions: 4
+    replication_factor: 3
+    config:
+      retention.ms: 86400000
+
+  - name: agent.jobs
+    partitions: 4
+    replication_factor: 3
+    config:
+      retention.ms: 86400000
+
+  - name: legacy.jobs
+    partitions: 4
+    replication_factor: 3
+    config:
+      retention.ms: 86400000
+
+  - name: bex.jobs
+    partitions: 4
+    replication_factor: 3
+    config:
+      retention.ms: 86400000
+
+  # ── Requirements ──────────────────────────────────────────────────────────
+  - name: requirements.changed
+    partitions: 6
+    replication_factor: 3
+    config:
+      retention.ms: 604800000
+
+  - name: requirements.approved
+    partitions: 4
+    replication_factor: 3
+    config:
+      retention.ms: 604800000
+
+  # ── MEE Events (immutable evidence) ──────────────────────────────────────
+  - name: mee.events
+    partitions: 24
+    replication_factor: 3
+    config:
+      retention.ms: 31536000000  # 1 year (compliance requirement: 7 years via cold storage)
+      cleanup.policy: delete
+      min.insync.replicas: 2    # Durability for compliance
+
+  # ── Deployments ───────────────────────────────────────────────────────────
+  - name: deployments.started
+    partitions: 4
+    replication_factor: 3
+    config:
+      retention.ms: 604800000
+
+  - name: deployments.completed
+    partitions: 4
+    replication_factor: 3
+    config:
+      retention.ms: 604800000
+
+  # ── Notifications ─────────────────────────────────────────────────────────
+  - name: notifications.send
+    partitions: 6
+    replication_factor: 3
+    config:
+      retention.ms: 86400000
+
+  # ── Platform Events ───────────────────────────────────────────────────────
+  - name: platform.events
+    partitions: 8
+    replication_factor: 3
+    config:
+      retention.ms: 604800000

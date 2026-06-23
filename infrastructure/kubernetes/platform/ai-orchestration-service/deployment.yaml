@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-orchestration-service
+  namespace: platform
+  labels:
+    app: ai-orchestration-service
+    version: "1.0.0"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ai-orchestration-service
+  template:
+    metadata:
+      labels:
+        app: ai-orchestration-service
+    spec:
+      containers:
+        - name: ai-orchestration-service
+          image: xccelera/ai-orchestration-service:latest
+          ports:
+            - containerPort: 8005
+          envFrom:
+            - secretRef:
+                name: ai-orchestration-service-secrets
+            - configMapRef:
+                name: platform-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-orchestration-service
+  namespace: platform
+spec:
+  selector:
+    app: ai-orchestration-service
+  ports:
+    - port: 8005
+      targetPort: 8005
+      protocol: TCP
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-orchestration-service-hpa
+  namespace: platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-orchestration-service
+  minReplicas: 3
+  maxReplicas: 15
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

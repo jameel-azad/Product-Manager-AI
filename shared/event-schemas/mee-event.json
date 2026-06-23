@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MEEEvent",
+  "description": "Published to Kafka topic 'mee.events' before AND after every AI engine action. MEE Service consumes and persists to append-only MongoDB with SHA-256 chain hashing.",
+  "type": "object",
+  "required": ["event_id", "event_type", "timestamp", "agent_id", "action_type", "project_id", "tenant_id", "phase", "input_hash", "status"],
+  "properties": {
+    "event_id":              { "type": "string", "format": "uuid" },
+    "event_type":            { "type": "string", "const": "mee.event" },
+    "timestamp":             { "type": "string", "format": "date-time" },
+    "agent_id":              { "type": "string", "description": "e.g. 'apix', 'uix', 'custom-agent-xyz'" },
+    "action_type":           { "type": "string", "description": "e.g. 'code_generation', 'test_execution', 'deployment'" },
+    "project_id":            { "type": "string", "format": "uuid" },
+    "requirement_id":        { "type": ["string","null"], "format": "uuid" },
+    "ai_job_id":             { "type": ["string","null"], "format": "uuid" },
+    "tenant_id":             { "type": "string", "format": "uuid" },
+    "phase":                 { "type": "string", "enum": ["before", "after"] },
+    "input_hash":            { "type": "string", "description": "SHA-256 of the input payload" },
+    "output_hash":           { "type": ["string","null"], "description": "SHA-256 of the output (null for before-events)" },
+    "duration_ms":           { "type": ["integer","null"] },
+    "status":                { "type": "string", "enum": ["started","completed","failed"] },
+    "artifact_s3_url":       { "type": ["string","null"], "format": "uri" },
+    "previous_event_hash":   { "type": ["string","null"], "description": "Chained SHA-256 for tamper detection" },
+    "metadata":              { "type": "object" }
+  }
+}

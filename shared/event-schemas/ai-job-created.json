@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AIJobCreated",
+  "description": "Published to Kafka topic 'ai.jobs.created' when a new AI engine job is enqueued",
+  "type": "object",
+  "required": ["event_id", "event_type", "timestamp", "job_id", "engine", "project_id", "tenant_id", "priority"],
+  "properties": {
+    "event_id":       { "type": "string", "format": "uuid" },
+    "event_type":     { "type": "string", "const": "ai.job.created" },
+    "timestamp":      { "type": "string", "format": "date-time" },
+    "job_id":         { "type": "string", "format": "uuid" },
+    "engine":         { "type": "string", "enum": ["apix","uix","integrationx","mobile_ai","mee","agent_developer","legacy_converter","business_extractor","ai_planning"] },
+    "project_id":     { "type": "string", "format": "uuid" },
+    "requirement_id": { "type": ["string","null"], "format": "uuid" },
+    "tenant_id":      { "type": "string", "format": "uuid" },
+    "priority":       { "type": "string", "enum": ["critical","high","medium","low"] },
+    "trigger_source": { "type": "string" },
+    "callback_url":   { "type": ["string","null"], "format": "uri" }
+  }
+}

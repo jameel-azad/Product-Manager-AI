@@ -1,0 +1,9 @@
+.env
+*.db
+*.db-shm
+*.db-wal
+backend/venv/
+backend/__pycache__/
+backend/*.py[cod]
+frontend/web-app/.next/
+frontend/web-app/node_modules/

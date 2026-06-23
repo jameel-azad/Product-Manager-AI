@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AIJobCompleted",
+  "description": "Published to Kafka topic 'ai.jobs.completed' when an AI engine job finishes (success or failure)",
+  "type": "object",
+  "required": ["event_id", "event_type", "timestamp", "job_id", "engine", "project_id", "tenant_id", "status"],
+  "properties": {
+    "event_id":       { "type": "string", "format": "uuid" },
+    "event_type":     { "type": "string", "const": "ai.job.completed" },
+    "timestamp":      { "type": "string", "format": "date-time" },
+    "job_id":         { "type": "string", "format": "uuid" },
+    "engine":         { "type": "string", "enum": ["apix","uix","integrationx","mobile_ai","mee","agent_developer","legacy_converter","business_extractor","ai_planning"] },
+    "project_id":     { "type": "string", "format": "uuid" },
+    "requirement_id": { "type": ["string","null"], "format": "uuid" },
+    "tenant_id":      { "type": "string", "format": "uuid" },
+    "status":         { "type": "string", "enum": ["completed","failed","cancelled"] },
+    "duration_ms":    { "type": ["integer","null"] },
+    "artifact_url":   { "type": ["string","null"], "format": "uri", "description": "S3 URL of generated artifact" },
+    "error_message":  { "type": ["string","null"] }
+  }
+}

@@ -1,0 +1,624 @@
+openapi: "3.1.0"
+info:
+  title: Monitoring & Evidence Engine (MEE) Service API
+  description: |
+    Immutable audit trail, AI agent observability, anomaly detection, and evidence export.
+    All AI engine actions must emit MEE events before and after execution.
+    SRS requirements: MEE-001 through MEE-006
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8008/api/v1
+
+tags:
+  - name: activity
+    description: "MEE-001: Real-time agent activity feed"
+  - name: evidence
+    description: "MEE-002: Evidence capture and retrieval"
+  - name: metrics
+    description: "MEE-003: Agent performance KPIs"
+  - name: anomalies
+    description: "MEE-004: Anomaly detection and alerts"
+  - name: export
+    description: "MEE-005: Evidence export for compliance"
+  - name: comparison
+    description: "MEE-006: Human vs AI productivity comparison"
+  - name: internal
+    description: Internal endpoints — called by AI engines, not clients
+
+paths:
+
+  /mee/activity-feed:
+    get:
+      tags: [activity]
+      summary: "MEE-001: Real-time agent activity feed"
+      description: Returns latest AI agent actions. Use the WebSocket endpoint for live streaming.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: agent_id
+          schema:
+            type: string
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        "200":
+          description: Activity feed entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityFeedResponse'
+
+  /mee/activity-feed/stream:
+    get:
+      tags: [activity]
+      summary: Server-Sent Events stream for live activity feed
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: SSE stream (text/event-stream)
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /mee/evidence/{project_id}:
+    get:
+      tags: [evidence]
+      summary: "MEE-002: List evidence records for a project"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: agent_id
+          schema:
+            type: string
+        - in: query
+          name: requirement_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: ai_job_id
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        "200":
+          description: Evidence records (append-only, tamper-proof)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceListResponse'
+
+  /mee/evidence/records/{record_id}:
+    get:
+      tags: [evidence]
+      summary: Get a single evidence record with chain hash verification
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: record_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Evidence record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceRecord'
+
+  /mee/metrics:
+    get:
+      tags: [metrics]
+      summary: "MEE-003: Agent performance KPIs"
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: agent_id
+          schema:
+            type: string
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [24h, 7d, 30d, 90d]
+            default: 7d
+      responses:
+        "200":
+          description: Agent performance metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentMetrics'
+
+  /mee/anomalies:
+    get:
+      tags: [anomalies]
+      summary: "MEE-004: List detected anomalies"
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: severity
+          schema:
+            type: string
+            enum: [critical, high, medium, low]
+        - in: query
+          name: resolved
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Anomaly list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Anomaly'
+
+  /mee/anomalies/{anomaly_id}/resolve:
+    post:
+      tags: [anomalies]
+      summary: Mark anomaly as resolved
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: anomaly_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resolution_note:
+                  type: string
+      responses:
+        "200":
+          description: Anomaly resolved
+
+  /mee/evidence/export:
+    post:
+      tags: [export]
+      summary: "MEE-005: Export evidence report for compliance/audit"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        "202":
+          description: Export job queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  export_job_id:
+                    type: string
+                    format: uuid
+                  estimated_ready_at:
+                    type: string
+                    format: date-time
+
+  /mee/evidence/export/{export_job_id}:
+    get:
+      tags: [export]
+      summary: Get export job status and download URL
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: export_job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Export status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportStatus'
+
+  /mee/comparison:
+    get:
+      tags: [comparison]
+      summary: "MEE-006: Human vs AI productivity comparison"
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: sprint_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+      responses:
+        "200":
+          description: Human vs AI comparison data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductivityComparison'
+
+  # ── Internal Endpoints ────────────────────────────────────────────────────
+
+  /mee/events:
+    post:
+      tags: [internal]
+      summary: Ingest MEE event (called by AI engines / orchestrator)
+      description: AI engines emit before-event and after-event for every action.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MEEEventIngest'
+      responses:
+        "201":
+          description: Event recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  record_id:
+                    type: string
+                    format: uuid
+                  chain_hash:
+                    type: string
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        default: 50
+
+  schemas:
+    ActivityFeedEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        agent_id:
+          type: string
+        action_type:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        requirement_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [started, completed, failed]
+        duration_ms:
+          type: integer
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+
+    ActivityFeedResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityFeedEntry'
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+
+    EvidenceRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        agent_id:
+          type: string
+        action_type:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        requirement_id:
+          type: string
+          format: uuid
+          nullable: true
+        ai_job_id:
+          type: string
+          format: uuid
+          nullable: true
+        phase:
+          type: string
+          enum: [before, after]
+        input_hash:
+          type: string
+          description: SHA-256 of input
+        output_hash:
+          type: string
+          nullable: true
+          description: SHA-256 of output
+        duration_ms:
+          type: integer
+          nullable: true
+        status:
+          type: string
+        artifact_s3_url:
+          type: string
+          nullable: true
+        chain_hash:
+          type: string
+          description: SHA-256(previous_chain_hash + this_record_data) for tamper detection
+        timestamp:
+          type: string
+          format: date-time
+
+    EvidenceListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvidenceRecord'
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+
+    AgentMetrics:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        period:
+          type: string
+        tasks_completed:
+          type: integer
+        tasks_failed:
+          type: integer
+        success_rate:
+          type: number
+          format: float
+        avg_generation_time_ms:
+          type: integer
+        error_frequency:
+          type: number
+        p95_latency_ms:
+          type: integer
+
+    Anomaly:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        agent_id:
+          type: string
+        anomaly_type:
+          type: string
+          enum: [repeated_failure, unexpected_output, performance_degradation, unusual_pattern]
+        severity:
+          type: string
+          enum: [critical, high, medium, low]
+        description:
+          type: string
+        detected_at:
+          type: string
+          format: date-time
+        resolved:
+          type: boolean
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ExportRequest:
+      type: object
+      required: [project_id, format]
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        sprint_id:
+          type: string
+          format: uuid
+          nullable: true
+        agent_id:
+          type: string
+          nullable: true
+        from_date:
+          type: string
+          format: date
+        to_date:
+          type: string
+          format: date
+        format:
+          type: string
+          enum: [pdf, csv, json]
+        include_artifacts:
+          type: boolean
+          default: false
+
+    ExportStatus:
+      type: object
+      properties:
+        export_job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, processing, ready, failed]
+        download_url:
+          type: string
+          format: uri
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        file_size_bytes:
+          type: integer
+          nullable: true
+
+    ProductivityComparison:
+      type: object
+      properties:
+        period:
+          type: string
+        ai_tasks_completed:
+          type: integer
+        human_tasks_completed:
+          type: integer
+        ai_avg_completion_time_ms:
+          type: integer
+        human_avg_completion_time_ms:
+          type: integer
+        ai_error_rate:
+          type: number
+        human_error_rate:
+          type: number
+        by_agent:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentMetrics'
+
+    MEEEventIngest:
+      type: object
+      required: [agent_id, action_type, project_id, tenant_id, phase, input_hash, status]
+      properties:
+        agent_id:
+          type: string
+        action_type:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        requirement_id:
+          type: string
+          format: uuid
+          nullable: true
+        ai_job_id:
+          type: string
+          format: uuid
+          nullable: true
+        tenant_id:
+          type: string
+          format: uuid
+        phase:
+          type: string
+          enum: [before, after]
+        input_hash:
+          type: string
+        output_hash:
+          type: string
+          nullable: true
+        duration_ms:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [started, completed, failed]
+        artifact_s3_url:
+          type: string
+          nullable: true
+        metadata:
+          type: object

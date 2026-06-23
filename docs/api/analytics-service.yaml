@@ -1,0 +1,282 @@
+openapi: "3.1.0"
+info:
+  title: Analytics & KPI Service API
+  description: |
+    Project KPIs, velocity tracking, burndown charts, and AI productivity dashboards.
+    Exposes REST + WebSocket for real-time dashboard updates.
+    SRS requirements: MEE-003, MEE-006, and platform analytics
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8009/api/v1
+
+tags:
+  - name: dashboard
+  - name: velocity
+  - name: kpis
+
+paths:
+
+  /analytics/dashboard/{project_id}:
+    get:
+      tags: [dashboard]
+      summary: Get full analytics dashboard data for a project
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummary'
+
+  /analytics/velocity/{project_id}:
+    get:
+      tags: [velocity]
+      summary: Get sprint velocity history
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: sprints
+          schema:
+            type: integer
+            default: 10
+            description: Last N sprints
+      responses:
+        "200":
+          description: Velocity data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VelocityData'
+
+  /analytics/burndown/{sprint_id}:
+    get:
+      tags: [velocity]
+      summary: Get burndown chart data for a sprint
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sprint_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Burndown data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BurndownData'
+
+  /analytics/kpis/{project_id}:
+    get:
+      tags: [kpis]
+      summary: Get project KPIs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+      responses:
+        "200":
+          description: KPI data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KPIData'
+
+  /analytics/ai-productivity/{project_id}:
+    get:
+      tags: [kpis]
+      summary: Get AI vs human productivity comparison for a project
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+      responses:
+        "200":
+          description: AI productivity data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIProductivityData'
+
+  /ws/analytics/{project_id}:
+    get:
+      tags: [dashboard]
+      summary: WebSocket for real-time KPI updates
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "101":
+          description: WebSocket upgrade
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    DashboardSummary:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        active_sprint:
+          type: object
+          nullable: true
+        open_requirements:
+          type: integer
+        ai_jobs_running:
+          type: integer
+        test_pass_rate:
+          type: number
+        deployment_frequency:
+          type: number
+        ai_tasks_this_week:
+          type: integer
+        velocity_trend:
+          type: string
+          enum: [increasing, stable, decreasing]
+
+    VelocityData:
+      type: object
+      properties:
+        sprints:
+          type: array
+          items:
+            type: object
+            properties:
+              sprint_id:
+                type: string
+                format: uuid
+              sprint_name:
+                type: string
+              committed_points:
+                type: integer
+              completed_points:
+                type: integer
+              start_date:
+                type: string
+                format: date
+              end_date:
+                type: string
+                format: date
+        average_velocity:
+          type: number
+
+    BurndownData:
+      type: object
+      properties:
+        sprint_id:
+          type: string
+          format: uuid
+        ideal_line:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              points_remaining:
+                type: integer
+        actual_line:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              points_remaining:
+                type: integer
+
+    KPIData:
+      type: object
+      properties:
+        deployment_frequency:
+          type: number
+          description: Deployments per week
+        lead_time_days:
+          type: number
+        change_failure_rate:
+          type: number
+        mttr_hours:
+          type: number
+          description: Mean time to recovery
+        test_coverage:
+          type: number
+        defect_escape_rate:
+          type: number
+
+    AIProductivityData:
+      type: object
+      properties:
+        ai_tasks_completed:
+          type: integer
+        human_tasks_completed:
+          type: integer
+        ai_avg_time_ms:
+          type: integer
+        human_avg_time_ms:
+          type: integer
+        ai_error_rate:
+          type: number
+        human_error_rate:
+          type: number
+        ai_cost_saving_estimate:
+          type: string

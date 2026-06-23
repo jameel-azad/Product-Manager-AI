@@ -1,0 +1,418 @@
+openapi: "3.1.0"
+info:
+  title: Business Extraction Service API
+  description: |
+    Codebase → BRD, process flows, domain knowledge wiki, and change impact analysis.
+    SRS requirements: BEX-001 through BEX-008
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8013/api/v1
+
+tags:
+  - name: analysis
+  - name: brd
+  - name: process-flows
+  - name: wiki
+  - name: impact
+
+paths:
+
+  /extraction/analyze:
+    post:
+      tags: [analysis]
+      summary: "BEX-001: Analyze codebase to extract embedded business logic"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, repository_url]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                repository_url:
+                  type: string
+                  format: uri
+                modules:
+                  type: array
+                  items:
+                    type: string
+                  description: Subset of modules; defaults to entire codebase
+                include_legacy:
+                  type: boolean
+                  default: false
+                  description: "BEX-008: Include legacy code extraction"
+      responses:
+        "202":
+          description: Analysis job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractionJob'
+
+  /extraction/jobs/{job_id}:
+    get:
+      tags: [analysis]
+      summary: Get extraction job status
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractionJob'
+
+  /extraction/brd/{project_id}:
+    get:
+      tags: [brd]
+      summary: "BEX-002: Get Business Rules Document for a project"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [json, markdown, pdf]
+            default: json
+        - in: query
+          name: audience
+          schema:
+            type: string
+            enum: [business, technical]
+            default: business
+          description: "BEX-006: Stakeholder-friendly vs technical output"
+      responses:
+        "200":
+          description: Business Rules Document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BRD'
+
+  /extraction/process-flows/{project_id}:
+    get:
+      tags: [process-flows]
+      summary: "BEX-003: Get extracted business process flows"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [bpmn, flowchart_json, mermaid]
+            default: mermaid
+      responses:
+        "200":
+          description: Process flow diagrams
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProcessFlow'
+
+  /extraction/wiki/{project_id}:
+    get:
+      tags: [wiki]
+      summary: "BEX-004: Get auto-generated domain knowledge wiki"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: domain
+          schema:
+            type: string
+          description: Filter by business domain
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Full-text search (powered by Elasticsearch)
+      responses:
+        "200":
+          description: Wiki entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WikiEntry'
+
+  /extraction/change-impact:
+    post:
+      tags: [impact]
+      summary: "BEX-005: Analyze change impact on business rules"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, changed_files]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                changed_files:
+                  type: array
+                  items:
+                    type: string
+                commit_sha:
+                  type: string
+      responses:
+        "200":
+          description: Change impact analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeImpactReport'
+
+  /extraction/report/{project_id}:
+    get:
+      tags: [brd]
+      summary: "BEX-006: Full stakeholder-friendly business documentation report"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Full report download URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  report_url:
+                    type: string
+                    format: uri
+                  generated_at:
+                    type: string
+                    format: date-time
+
+  /extraction/traceability/{project_id}:
+    get:
+      tags: [brd]
+      summary: "BEX-007: Link extracted rules to existing requirements"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Traceability gaps
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractionTraceability'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ExtractionJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, running, completed, failed]
+        progress_percentage:
+          type: integer
+        business_rules_found:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    BRD:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+        business_rules:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              domain:
+                type: string
+              title:
+                type: string
+              description:
+                type: string
+              constraints:
+                type: array
+                items:
+                  type: string
+              validations:
+                type: array
+                items:
+                  type: string
+              source_files:
+                type: array
+                items:
+                  type: string
+        generated_at:
+          type: string
+          format: date-time
+
+    ProcessFlow:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        domain:
+          type: string
+        description:
+          type: string
+        diagram_source:
+          type: string
+          description: BPMN/Mermaid/flowchart source
+        s3_url:
+          type: string
+          format: uri
+
+    WikiEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        domain:
+          type: string
+        entity:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        source_files:
+          type: array
+          items:
+            type: string
+        last_updated:
+          type: string
+          format: date-time
+
+    ChangeImpactReport:
+      type: object
+      properties:
+        changed_files:
+          type: array
+          items:
+            type: string
+        impacted_rules:
+          type: array
+          items:
+            type: object
+            properties:
+              rule_id:
+                type: string
+              rule_title:
+                type: string
+              impact_type:
+                type: string
+                enum: [added, modified, removed]
+              before_description:
+                type: string
+                nullable: true
+              after_description:
+                type: string
+                nullable: true
+        impacted_process_flows:
+          type: array
+          items:
+            type: string
+
+    ExtractionTraceability:
+      type: object
+      properties:
+        linked_rules:
+          type: array
+          items:
+            type: object
+            properties:
+              rule_id:
+                type: string
+              requirement_id:
+                type: string
+                format: uuid
+        undocumented_rules:
+          type: array
+          items:
+            type: string
+          description: Business rules found in code with no corresponding requirement
+        orphan_requirements:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Requirements with no corresponding code logic

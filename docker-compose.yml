@@ -1,0 +1,240 @@
+version: "3.9"
+
+# Full application stack. Requires docker-compose.infra.yml running first.
+# Usage: docker compose up -d
+
+services:
+
+  auth-service:
+    build: ./services/auth-service
+    container_name: auth-service
+    ports:
+      - "8001:8001"
+    env_file: .env
+    environment:
+      SERVICE_PORT: 8001
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  project-service:
+    build: ./services/project-service
+    container_name: project-service
+    ports:
+      - "8002:8002"
+    env_file: .env
+    environment:
+      SERVICE_PORT: 8002
+    depends_on:
+      - postgres
+      - kafka
+      - redis
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  requirement-service:
+    build: ./services/requirement-service
+    container_name: requirement-service
+    ports:
+      - "8003:8003"
+    env_file: .env
+    environment:
+      SERVICE_PORT: 8003
+    depends_on:
+      - postgres
+      - mongodb
+      - kafka
+      - elasticsearch
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  design-service:
+    build: ./services/design-service
+    container_name: design-service
+    ports:
+      - "8004:8004"
+    env_file: .env
+    environment:
+      SERVICE_PORT: 8004
+    depends_on:
+      - mongodb
+      - minio
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  ai-orchestration-service:
+    build: ./services/ai-orchestration-service
+    container_name: ai-orchestration-service
+    ports:
+      - "8005:8005"
+    env_file: .env
+    environment:
+      SERVICE_PORT: 8005
+    depends_on:
+      - redis
+      - kafka
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  test-management-service:
+    build: ./services/test-management-service
+    container_name: test-management-service
+    ports:
+      - "8006:8006"
+    env_file: .env
+    environment:
+      SERVICE_PORT: 8006
+    depends_on:
+      - postgres
+      - minio
+      - kafka
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  devops-service:
+    build: ./services/devops-service
+    container_name: devops-service
+    ports:
+      - "8007:8007"
+    env_file: .env
+    environment:
+      SERVICE_PORT: 8007
+    depends_on:
+      - postgres
+      - kafka
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  mee-service:
+    build: ./services/mee-service
+    container_name: mee-service
+    ports:
+      - "8008:8008"
+    env_file: .env
+    environment:
+      SERVICE_PORT: 8008
+    depends_on:
+      - mongodb
+      - influxdb
+      - minio
+      - kafka
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  analytics-service:
+    build: ./services/analytics-service
+    container_name: analytics-service
+    ports:
+      - "8009:8009"
+    env_file: .env
+    environment:
+      SERVICE_PORT: 8009
+    depends_on:
+      - influxdb
+      - postgres
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  notification-service:
+    build: ./services/notification-service
+    container_name: notification-service
+    ports:
+      - "8010:8010"
+    env_file: .env
+    environment:
+      SERVICE_PORT: 8010
+    depends_on:
+      - redis
+      - kafka
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  agent-developer-service:
+    build: ./services/agent-developer-service
+    container_name: agent-developer-service
+    ports:
+      - "8011:8011"
+    env_file: .env
+    environment:
+      SERVICE_PORT: 8011
+    depends_on:
+      - postgres
+      - kafka
+      - redis
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  legacy-conversion-service:
+    build: ./services/legacy-conversion-service
+    container_name: legacy-conversion-service
+    ports:
+      - "8012:8012"
+    env_file: .env
+    environment:
+      SERVICE_PORT: 8012
+    depends_on:
+      - postgres
+      - minio
+      - kafka
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  business-extraction-service:
+    build: ./services/business-extraction-service
+    container_name: business-extraction-service
+    ports:
+      - "8013:8013"
+    env_file: .env
+    environment:
+      SERVICE_PORT: 8013
+    depends_on:
+      - mongodb
+      - elasticsearch
+      - kafka
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  llm-proxy:
+    build: ./integrations/llm-proxy
+    container_name: llm-proxy
+    ports:
+      - "4000:4000"
+    env_file: .env
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend/web-app
+    container_name: xccelera-frontend
+    ports:
+      - "3000:3000"
+    env_file: .env
+    depends_on:
+      - auth-service
+      - project-service
+    networks:
+      - xccelera-net
+    restart: unless-stopped
+
+networks:
+  xccelera-net:
+    external: true
+
+# Infrastructure services are in docker-compose.infra.yml
+# Declare them as external so they are reachable here

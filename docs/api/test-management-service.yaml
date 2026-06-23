@@ -1,0 +1,475 @@
+openapi: "3.1.0"
+info:
+  title: Test Management Service API
+  description: |
+    Test case generation, parallel execution, coverage analysis, regression selection, and defect tracking.
+    SRS requirements: TST-001 through TST-006
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8006/api/v1
+
+tags:
+  - name: test-cases
+  - name: test-runs
+  - name: coverage
+  - name: defects
+  - name: performance
+
+paths:
+
+  /tests/cases:
+    get:
+      tags: [test-cases]
+      summary: List test cases for a project
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: requirement_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [unit, integration, e2e, performance]
+      responses:
+        "200":
+          description: Test case list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestCaseListResponse'
+
+  /tests/generate:
+    post:
+      tags: [test-cases]
+      summary: "TST-001: AI-generate test cases from requirements and code"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                requirement_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                ai_job_id:
+                  type: string
+                  format: uuid
+                  description: Link test cases to a specific APIx/UIx generation job
+                test_types:
+                  type: array
+                  items:
+                    type: string
+                    enum: [unit, integration, e2e, performance]
+                  default: [unit, integration]
+      responses:
+        "202":
+          description: Test generation job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIJobReference'
+
+  /tests/cases/{test_case_id}:
+    get:
+      tags: [test-cases]
+      summary: Get test case detail
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: test_case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Test case
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestCase'
+
+  /tests/runs:
+    get:
+      tags: [test-runs]
+      summary: List test runs for a project
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [queued, running, passed, failed, cancelled]
+      responses:
+        "200":
+          description: Test run list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TestRun'
+
+  /tests/execute:
+    post:
+      tags: [test-runs]
+      summary: "TST-002: Execute test cases in parallel"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                test_case_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                  description: Defaults to all test cases for project
+                environment:
+                  type: string
+                  enum: [dev, staging]
+                  default: dev
+                parallel_workers:
+                  type: integer
+                  default: 10
+                  maximum: 100
+      responses:
+        "202":
+          description: Test run started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestRun'
+
+  /tests/runs/{run_id}:
+    get:
+      tags: [test-runs]
+      summary: Get test run status and results
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Test run detail with results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestRunDetail'
+
+  /tests/coverage/{project_id}:
+    get:
+      tags: [coverage]
+      summary: "TST-003: Get code coverage report for a project"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: run_id
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Coverage report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoverageReport'
+
+  /tests/regression/select:
+    post:
+      tags: [test-runs]
+      summary: "TST-004: AI-select relevant regression tests for a code change"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, changed_files]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                changed_files:
+                  type: array
+                  items:
+                    type: string
+                commit_sha:
+                  type: string
+      responses:
+        "200":
+          description: Selected regression test IDs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  selected_test_ids:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+                  selection_rationale:
+                    type: string
+
+  /tests/performance/{project_id}:
+    get:
+      tags: [performance]
+      summary: "TST-006: Get performance test results and baselines"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Performance test summary
+
+  /tests/defects:
+    get:
+      tags: [defects]
+      summary: List defects for a project
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: severity
+          schema:
+            type: string
+            enum: [critical, high, medium, low]
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [open, in_progress, resolved, closed]
+      responses:
+        "200":
+          description: Defect list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Defect'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    TestCase:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [unit, integration, e2e, performance]
+        steps:
+          type: array
+          items:
+            type: string
+        expected_result:
+          type: string
+        requirement_id:
+          type: string
+          format: uuid
+          nullable: true
+        ai_generated:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    TestCaseListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TestCase'
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+
+    TestRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, running, passed, failed, cancelled]
+        total_cases:
+          type: integer
+        passed:
+          type: integer
+        failed:
+          type: integer
+        skipped:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    TestRunDetail:
+      allOf:
+        - $ref: '#/components/schemas/TestRun'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                type: object
+                properties:
+                  test_case_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [passed, failed, skipped]
+                  duration_ms:
+                    type: integer
+                  error_message:
+                    type: string
+                    nullable: true
+            coverage_percentage:
+              type: number
+
+    CoverageReport:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        overall_percentage:
+          type: number
+        line_coverage:
+          type: number
+        branch_coverage:
+          type: number
+        uncovered_paths:
+          type: array
+          items:
+            type: string
+        generated_at:
+          type: string
+          format: date-time
+
+    Defect:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        severity:
+          type: string
+          enum: [critical, high, medium, low]
+        status:
+          type: string
+          enum: [open, in_progress, resolved, closed]
+        test_run_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    AIJobReference:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string

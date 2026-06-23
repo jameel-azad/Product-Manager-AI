@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RequirementChanged",
+  "description": "Published to Kafka topic 'requirements.changed' — triggers re-generation in APIx/UIx if auto-regen is enabled (APIX-005, INTX-005)",
+  "type": "object",
+  "required": ["event_id", "event_type", "timestamp", "requirement_id", "project_id", "tenant_id", "change_type"],
+  "properties": {
+    "event_id":         { "type": "string", "format": "uuid" },
+    "event_type":       { "type": "string", "const": "requirement.changed" },
+    "timestamp":        { "type": "string", "format": "date-time" },
+    "requirement_id":   { "type": "string", "format": "uuid" },
+    "project_id":       { "type": "string", "format": "uuid" },
+    "tenant_id":        { "type": "string", "format": "uuid" },
+    "changed_by_user_id": { "type": "string", "format": "uuid" },
+    "change_type":      { "type": "string", "enum": ["created","updated","deleted","approved","deprecated"] },
+    "previous_version": { "type": ["integer","null"] },
+    "new_version":      { "type": "integer" },
+    "linked_apix_job_ids": {
+      "type": "array",
+      "items": { "type": "string", "format": "uuid" }
+    },
+    "linked_uix_job_ids": {
+      "type": "array",
+      "items": { "type": "string", "format": "uuid" }
+    },
+    "auto_regen_enabled": { "type": "boolean", "default": false }
+  }
+}

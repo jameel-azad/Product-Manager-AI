@@ -1,0 +1,543 @@
+openapi: "3.1.0"
+info:
+  title: AI Orchestration Service API
+  description: |
+    Central routing layer for all AI engine jobs (APIx, UIx, IntegrationX, Mobile AI, Agent Developer).
+    No AI engine is called directly by the client — all triggers flow through this service.
+    SRS requirements: APIX-001, APIX-003, UIX-001, UIX-003, INTX-001, INTX-002, MOB-001, MOB-002
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8005/api/v1
+
+tags:
+  - name: jobs
+    description: Generic AI job management
+  - name: apix
+    description: APIx — Backend generation jobs
+  - name: uix
+    description: UIx — Frontend generation jobs
+  - name: integrationx
+    description: IntegrationX — Frontend-backend binding jobs
+  - name: mobile
+    description: Mobile AI — iOS/Android generation jobs
+  - name: websocket
+    description: Real-time job status streaming
+
+paths:
+
+  /ai/jobs:
+    get:
+      tags: [jobs]
+      summary: List AI jobs for a project
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: engine
+          schema:
+            type: string
+            enum: [apix, uix, integrationx, mobile_ai, agent_developer, legacy_converter, business_extractor]
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [queued, running, completed, failed, cancelled]
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        "200":
+          description: Job list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobListResponse'
+
+  /ai/jobs/{job_id}:
+    get:
+      tags: [jobs]
+      summary: Get AI job status and result
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        "200":
+          description: Job detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIJob'
+    delete:
+      tags: [jobs]
+      summary: Cancel a queued or running job
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        "200":
+          description: Job cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIJob'
+
+  # ── APIx ──────────────────────────────────────────────────────────────────
+
+  /ai/apix/trigger:
+    post:
+      tags: [apix]
+      summary: "APIX-001: Trigger APIx backend code generation from a requirement"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/APIxTriggerRequest'
+      responses:
+        "202":
+          description: APIx job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIJob'
+
+  /ai/apix/jobs/{job_id}:
+    get:
+      tags: [apix]
+      summary: "APIX-003: Get APIx job status and generated code reference"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        "200":
+          description: APIx job detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIxJobResult'
+
+  /ai/apix/jobs/{job_id}/contract:
+    get:
+      tags: [apix]
+      summary: "APIX-004: Get auto-synced OpenAPI contract from APIx generation"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        "200":
+          description: OpenAPI contract YAML/JSON
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ── UIx ───────────────────────────────────────────────────────────────────
+
+  /ai/uix/trigger:
+    post:
+      tags: [uix]
+      summary: "UIX-001: Trigger UIx frontend generation from a user story"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UIxTriggerRequest'
+      responses:
+        "202":
+          description: UIx job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIJob'
+
+  /ai/uix/jobs/{job_id}:
+    get:
+      tags: [uix]
+      summary: "UIX-003: Get UIx job status and generated component reference"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        "200":
+          description: UIx job detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UIxJobResult'
+
+  /ai/uix/jobs/{job_id}/preview:
+    get:
+      tags: [uix]
+      summary: "UIX-005: Get live preview URL for UIx-generated UI"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        "200":
+          description: Preview URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preview_url:
+                    type: string
+                    format: uri
+                  expires_at:
+                    type: string
+                    format: date-time
+
+  # ── IntegrationX ──────────────────────────────────────────────────────────
+
+  /ai/integrationx/trigger:
+    post:
+      tags: [integrationx]
+      summary: "INTX-001: Trigger IntegrationX binding after APIx + UIx complete"
+      description: Automatically triggered by the orchestrator when both APIx and UIx jobs for a requirement complete successfully. Can also be triggered manually.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationXTriggerRequest'
+      responses:
+        "202":
+          description: IntegrationX job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIJob'
+
+  /ai/integrationx/jobs/{job_id}:
+    get:
+      tags: [integrationx]
+      summary: "INTX-002: Get IntegrationX binding status and mismatch report"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        "200":
+          description: IntegrationX job detail with mismatches
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationXJobResult'
+
+  # ── Mobile AI ─────────────────────────────────────────────────────────────
+
+  /ai/mobile/trigger:
+    post:
+      tags: [mobile]
+      summary: "MOB-001: Trigger Mobile AI for iOS/Android app generation"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileTriggerRequest'
+      responses:
+        "202":
+          description: Mobile AI job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIJob'
+
+  /ai/mobile/jobs/{job_id}:
+    get:
+      tags: [mobile]
+      summary: "MOB-002: Get Mobile AI build status and versioning info"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        "200":
+          description: Mobile job detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileJobResult'
+
+  # ── WebSocket ─────────────────────────────────────────────────────────────
+
+  /ws/jobs/{project_id}:
+    get:
+      tags: [websocket]
+      summary: WebSocket endpoint for real-time job status updates
+      description: |
+        Upgrade to WebSocket. Messages are JSON with shape:
+        `{"job_id": "uuid", "engine": "apix", "status": "completed", "timestamp": "..."}`
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "101":
+          description: WebSocket upgrade
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        default: 20
+
+  schemas:
+    AIJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        engine:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        requirement_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [queued, running, completed, failed, cancelled, retrying]
+        priority:
+          type: string
+        trigger_source:
+          type: string
+        attempt_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+
+    JobListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIJob'
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+
+    APIxTriggerRequest:
+      type: object
+      required: [project_id, requirement_id]
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        requirement_id:
+          type: string
+          format: uuid
+        tech_stack:
+          type: array
+          items:
+            type: string
+        priority:
+          type: string
+          enum: [critical, high, medium, low]
+          default: medium
+        auto_trigger_integrationx:
+          type: boolean
+          default: true
+
+    APIxJobResult:
+      allOf:
+        - $ref: '#/components/schemas/AIJob'
+        - type: object
+          properties:
+            code_artifact_url:
+              type: string
+              format: uri
+            repository_pr_url:
+              type: string
+              format: uri
+            openapi_contract_url:
+              type: string
+              format: uri
+
+    UIxTriggerRequest:
+      type: object
+      required: [project_id, requirement_id]
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        requirement_id:
+          type: string
+          format: uuid
+        design_spec_url:
+          type: string
+          format: uri
+          nullable: true
+        component_library:
+          type: string
+          nullable: true
+        priority:
+          type: string
+          enum: [critical, high, medium, low]
+          default: medium
+
+    UIxJobResult:
+      allOf:
+        - $ref: '#/components/schemas/AIJob'
+        - type: object
+          properties:
+            component_artifact_url:
+              type: string
+              format: uri
+            preview_url:
+              type: string
+              format: uri
+
+    IntegrationXTriggerRequest:
+      type: object
+      required: [project_id, apix_job_id, uix_job_id]
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        apix_job_id:
+          type: string
+          format: uuid
+        uix_job_id:
+          type: string
+          format: uuid
+        requirement_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    IntegrationXJobResult:
+      allOf:
+        - $ref: '#/components/schemas/AIJob'
+        - type: object
+          properties:
+            mismatches:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContractMismatch'
+            integration_test_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+            bound_artifact_url:
+              type: string
+              format: uri
+
+    ContractMismatch:
+      type: object
+      properties:
+        endpoint:
+          type: string
+        mismatch_type:
+          type: string
+          enum: [missing_field, type_mismatch, auth_flow_incompatible, missing_endpoint]
+        frontend_expectation:
+          type: string
+        backend_provides:
+          type: string
+        severity:
+          type: string
+          enum: [blocking, warning]
+
+    MobileTriggerRequest:
+      type: object
+      required: [project_id, platform, requirement_ids]
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        platform:
+          type: string
+          enum: [ios, android, both]
+        requirement_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        app_bundle_id:
+          type: string
+
+    MobileJobResult:
+      allOf:
+        - $ref: '#/components/schemas/AIJob'
+        - type: object
+          properties:
+            platform:
+              type: string
+            build_version:
+              type: string
+            artifact_url:
+              type: string
+              format: uri
+            test_case_ids:
+              type: array
+              items:
+                type: string
+                format: uuid

@@ -1,0 +1,121 @@
+# Xccelera Platform Helm Values
+# Override per environment: helm upgrade xccelera . -f values-prod.yaml
+
+global:
+  registry: ghcr.io/xccelera
+  imageTag: latest
+  imagePullPolicy: Always
+  environment: production
+
+# ── Service replicas ──────────────────────────────────────────
+services:
+  auth-service:
+    enabled: true
+    replicas: 3
+    port: 8001
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+  project-service:
+    enabled: true
+    replicas: 3
+    port: 8002
+
+  requirement-service:
+    enabled: true
+    replicas: 2
+    port: 8003
+
+  design-service:
+    enabled: true
+    replicas: 2
+    port: 8004
+
+  ai-orchestration-service:
+    enabled: true
+    replicas: 3
+    port: 8005
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+  test-management-service:
+    enabled: true
+    replicas: 3
+    port: 8006
+
+  devops-service:
+    enabled: true
+    replicas: 2
+    port: 8007
+
+  mee-service:
+    enabled: true
+    replicas: 3
+    port: 8008
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+  analytics-service:
+    enabled: true
+    replicas: 2
+    port: 8009
+
+  notification-service:
+    enabled: true
+    replicas: 2
+    port: 8010
+
+  agent-developer-service:
+    enabled: true
+    replicas: 2
+    port: 8011
+
+  legacy-conversion-service:
+    enabled: true
+    replicas: 2
+    port: 8012
+
+  business-extraction-service:
+    enabled: true
+    replicas: 2
+    port: 8013
+
+# ── Infrastructure dependencies ───────────────────────────────
+kafka:
+  enabled: false  # Use AWS MSK in cloud. Set true for on-prem.
+  replicaCount: 3
+
+redis:
+  enabled: false  # Use AWS ElastiCache in cloud. Set true for on-prem.
+  replica:
+    replicaCount: 2
+
+# ── Ingress ───────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  host: platform.xccelera.ai
+  tls: true
+  certIssuer: letsencrypt-prod
+
+# ── Secrets (pulled from Vault at deploy time) ────────────────
+vault:
+  enabled: true
+  agentInjector: true
+  authPath: kubernetes
+  roleName: xccelera-platform

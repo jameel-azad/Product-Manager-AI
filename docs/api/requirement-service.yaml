@@ -1,0 +1,422 @@
+openapi: "3.1.0"
+info:
+  title: Requirement Service API
+  description: |
+    NLP requirement intake, traceability matrix, conflict detection, and artifact linking.
+    SRS requirements: PLN-001, PLN-004, PLN-005
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8003/api/v1
+
+tags:
+  - name: requirements
+  - name: nlp
+    description: AI-powered NLP intake and analysis
+
+paths:
+
+  /requirements:
+    get:
+      tags: [requirements]
+      summary: List requirements for a project
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [draft, reviewed, approved, linked, deprecated]
+        - in: query
+          name: priority
+          schema:
+            type: string
+            enum: [critical, high, medium, low]
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        "200":
+          description: Requirement list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementListResponse'
+
+    post:
+      tags: [requirements]
+      summary: Create a structured requirement
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRequirementRequest'
+      responses:
+        "201":
+          description: Requirement created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Requirement'
+
+  /requirements/from-text:
+    post:
+      tags: [nlp]
+      summary: "PLN-001: AI intake — convert free-text business goal into structured requirements"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, text]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                text:
+                  type: string
+                  description: Free-text business goal or stakeholder description
+                context:
+                  type: string
+                  description: Optional additional context
+      responses:
+        "200":
+          description: Generated structured requirements (pending human approval)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Requirement'
+
+  /requirements/analyze-conflicts:
+    post:
+      tags: [nlp]
+      summary: "PLN-005: Detect conflicting or ambiguous requirements"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                requirement_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                  description: Subset to analyze; defaults to all draft/reviewed requirements
+      responses:
+        "200":
+          description: Conflict analysis result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictAnalysisResult'
+
+  /requirements/{requirement_id}:
+    get:
+      tags: [requirements]
+      summary: Get requirement by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequirementId'
+      responses:
+        "200":
+          description: Requirement detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Requirement'
+    put:
+      tags: [requirements]
+      summary: Update requirement (emits RequirementChanged event on Kafka)
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequirementId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRequirementRequest'
+      responses:
+        "200":
+          description: Updated requirement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Requirement'
+    delete:
+      tags: [requirements]
+      summary: Deprecate requirement
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequirementId'
+      responses:
+        "204":
+          description: Deprecated
+
+  /requirements/{requirement_id}/approve:
+    post:
+      tags: [requirements]
+      summary: Approve a requirement (moves status to approved)
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequirementId'
+      responses:
+        "200":
+          description: Requirement approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Requirement'
+
+  /requirements/{requirement_id}/traceability:
+    get:
+      tags: [requirements]
+      summary: "PLN-004: Get traceability links for a requirement"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequirementId'
+      responses:
+        "200":
+          description: Traceability chain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraceabilityChain'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    RequirementId:
+      name: requirement_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        default: 20
+
+  schemas:
+    Requirement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        acceptance_criteria:
+          type: array
+          items:
+            type: string
+        priority:
+          type: string
+          enum: [critical, high, medium, low]
+        status:
+          type: string
+          enum: [draft, reviewed, approved, linked, deprecated]
+        source_req_id:
+          type: string
+          description: SRS requirement ID e.g. PLN-001
+        version:
+          type: integer
+        ai_generated:
+          type: boolean
+        created_by:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateRequirementRequest:
+      type: object
+      required: [project_id, title, description]
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        acceptance_criteria:
+          type: array
+          items:
+            type: string
+        priority:
+          type: string
+          enum: [critical, high, medium, low]
+          default: medium
+
+    UpdateRequirementRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        acceptance_criteria:
+          type: array
+          items:
+            type: string
+        priority:
+          type: string
+        status:
+          type: string
+
+    RequirementListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Requirement'
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+
+    ConflictAnalysisResult:
+      type: object
+      properties:
+        conflicts:
+          type: array
+          items:
+            type: object
+            properties:
+              requirement_id_a:
+                type: string
+                format: uuid
+              requirement_id_b:
+                type: string
+                format: uuid
+              conflict_type:
+                type: string
+                enum: [contradiction, ambiguity, duplication, scope_overlap]
+              description:
+                type: string
+              severity:
+                type: string
+                enum: [blocking, warning, info]
+        total_conflicts:
+          type: integer
+        analyzed_count:
+          type: integer
+
+    TraceabilityChain:
+      type: object
+      properties:
+        requirement_id:
+          type: string
+          format: uuid
+        requirement_title:
+          type: string
+        linked_backlog_items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              title:
+                type: string
+        linked_ai_jobs:
+          type: array
+          items:
+            type: object
+            properties:
+              job_id:
+                type: string
+                format: uuid
+              engine:
+                type: string
+              status:
+                type: string
+        linked_code_artifacts:
+          type: array
+          items:
+            type: object
+            properties:
+              artifact_url:
+                type: string
+              repository_pr_url:
+                type: string
+        linked_test_cases:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              title:
+                type: string
+        linked_deployments:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              environment:
+                type: string
+              status:
+                type: string

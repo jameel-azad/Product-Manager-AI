@@ -1,0 +1,278 @@
+openapi: "3.1.0"
+info:
+  title: Legacy Code Conversion Service API
+  description: |
+    COBOL/FORTRAN/VB6/RPG → Java/.NET/Python/Node.js conversion with quality validation and progress tracking.
+    SRS requirements: LCC-001 through LCC-007
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8012/api/v1
+
+tags:
+  - name: ingestion
+  - name: conversion
+  - name: validation
+  - name: progress
+
+paths:
+
+  /legacy/ingest:
+    post:
+      tags: [ingestion]
+      summary: "LCC-001: Ingest legacy source code files for analysis"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [project_id, source_language]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                source_language:
+                  type: string
+                  enum: [cobol, fortran, vb6, rpg, pl1, pascal]
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                repository_url:
+                  type: string
+                  format: uri
+      responses:
+        "202":
+          description: Ingestion started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversionJob'
+
+  /legacy/convert:
+    post:
+      tags: [conversion]
+      summary: "LCC-002: Start language conversion job"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ingestion_job_id, target_language]
+              properties:
+                ingestion_job_id:
+                  type: string
+                  format: uuid
+                target_language:
+                  type: string
+                  enum: [java, csharp, python, nodejs]
+                incremental:
+                  type: boolean
+                  default: false
+                  description: "LCC-005: Convert module-by-module"
+                module_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: Subset of modules for incremental conversion
+      responses:
+        "202":
+          description: Conversion job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversionJob'
+
+  /legacy/jobs/{job_id}:
+    get:
+      tags: [progress]
+      summary: "LCC-007: Get conversion job status and progress"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversionJob'
+
+  /legacy/jobs/{job_id}/report:
+    get:
+      tags: [conversion]
+      summary: "LCC-003: Get detailed conversion report"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Conversion report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversionReport'
+
+  /legacy/validate:
+    post:
+      tags: [validation]
+      summary: "LCC-004: Validate converted code for correctness and equivalence"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [conversion_job_id]
+              properties:
+                conversion_job_id:
+                  type: string
+                  format: uuid
+      responses:
+        "202":
+          description: Validation job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIJobReference'
+
+  /legacy/tests/generate:
+    post:
+      tags: [validation]
+      summary: "LCC-006: Generate unit and regression tests for converted code"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [conversion_job_id]
+              properties:
+                conversion_job_id:
+                  type: string
+                  format: uuid
+      responses:
+        "202":
+          description: Test generation job queued
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ConversionJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        job_type:
+          type: string
+          enum: [ingestion, conversion, validation]
+        source_language:
+          type: string
+        target_language:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [queued, running, completed, failed, partially_completed]
+        progress_percentage:
+          type: integer
+        files_total:
+          type: integer
+        files_converted:
+          type: integer
+        estimated_completion:
+          type: string
+          format: date-time
+          nullable: true
+        risk_indicators:
+          type: array
+          items:
+            type: string
+        artifact_url:
+          type: string
+          format: uri
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ConversionReport:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        files_converted:
+          type: integer
+        files_requiring_review:
+          type: integer
+        business_rules_extracted:
+          type: integer
+        logic_mappings:
+          type: array
+          items:
+            type: object
+            properties:
+              source_construct:
+                type: string
+              target_construct:
+                type: string
+              confidence:
+                type: number
+        ambiguities:
+          type: array
+          items:
+            type: object
+            properties:
+              file:
+                type: string
+              line:
+                type: integer
+              description:
+                type: string
+              requires_human_review:
+                type: boolean
+        generated_at:
+          type: string
+          format: date-time
+
+    AIJobReference:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string

@@ -1,0 +1,606 @@
+openapi: "3.1.0"
+info:
+  title: DevOps / CI-CD Service API
+  description: |
+    CI/CD pipeline builder, deployment management, rollback automation, and approval workflows.
+    SRS requirements: DEP-001 through DEP-006
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8007/api/v1
+
+tags:
+  - name: pipelines
+  - name: deployments
+  - name: environments
+  - name: approvals
+  - name: releases
+
+paths:
+
+  /pipelines:
+    get:
+      tags: [pipelines]
+      summary: List CI/CD pipelines for a project
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Pipeline list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pipeline'
+    post:
+      tags: [pipelines]
+      summary: "DEP-001: Create CI/CD pipeline (AI-suggested stages)"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePipelineRequest'
+      responses:
+        "201":
+          description: Pipeline created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+
+  /pipelines/{pipeline_id}:
+    get:
+      tags: [pipelines]
+      summary: Get pipeline detail
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PipelineId'
+      responses:
+        "200":
+          description: Pipeline detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+    put:
+      tags: [pipelines]
+      summary: Update pipeline configuration
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PipelineId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePipelineRequest'
+      responses:
+        "200":
+          description: Updated pipeline
+
+  /pipelines/{pipeline_id}/run:
+    post:
+      tags: [pipelines]
+      summary: Manually trigger a pipeline run
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PipelineId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                environment:
+                  type: string
+                  enum: [dev, staging, prod]
+                commit_sha:
+                  type: string
+      responses:
+        "202":
+          description: Pipeline run triggered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineRun'
+
+  /pipelines/{pipeline_id}/suggest:
+    post:
+      tags: [pipelines]
+      summary: "DEP-001: Get AI-suggested pipeline stages based on project type"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PipelineId'
+      responses:
+        "200":
+          description: AI-suggested stages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PipelineStage'
+
+  /deployments:
+    get:
+      tags: [deployments]
+      summary: List deployments for a project
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: environment
+          schema:
+            type: string
+            enum: [dev, staging, prod]
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, running, success, failed, rolled_back]
+      responses:
+        "200":
+          description: Deployment list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Deployment'
+    post:
+      tags: [deployments]
+      summary: "DEP-002: Trigger a deployment"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeploymentRequest'
+      responses:
+        "202":
+          description: Deployment triggered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+
+  /deployments/{deployment_id}:
+    get:
+      tags: [deployments]
+      summary: Get deployment status
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DeploymentId'
+      responses:
+        "200":
+          description: Deployment detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+
+  /deployments/{deployment_id}/rollback:
+    post:
+      tags: [deployments]
+      summary: "DEP-003: Trigger rollback to last stable version"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DeploymentId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "202":
+          description: Rollback triggered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+
+  /environments:
+    get:
+      tags: [environments]
+      summary: "DEP-004: List environments for a project"
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Environment list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Environment'
+    post:
+      tags: [environments]
+      summary: "DEP-004: Create a new environment"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEnvironmentRequest'
+      responses:
+        "201":
+          description: Environment created
+
+  /approvals:
+    get:
+      tags: [approvals]
+      summary: "DEP-006: List pending deployment approvals"
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: project_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        "200":
+          description: Approval list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalGate'
+
+  /approvals/{approval_id}/approve:
+    post:
+      tags: [approvals]
+      summary: "DEP-006: Approve a deployment gate"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: approval_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment:
+                  type: string
+      responses:
+        "200":
+          description: Approved
+
+  /approvals/{approval_id}/reject:
+    post:
+      tags: [approvals]
+      summary: "DEP-006: Reject a deployment gate"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: approval_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Rejected
+
+  /releases/{deployment_id}/notes:
+    get:
+      tags: [releases]
+      summary: "DEP-005: Get AI-generated release notes for a deployment"
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DeploymentId'
+      responses:
+        "200":
+          description: Release notes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseNotes'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    PipelineId:
+      name: pipeline_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DeploymentId:
+      name: deployment_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    PipelineStage:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [build, test, sast, dast, docker_build, push, deploy, notify]
+        config:
+          type: object
+
+    Pipeline:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineStage'
+        trigger:
+          type: string
+          enum: [manual, push, pr, schedule]
+        created_at:
+          type: string
+          format: date-time
+
+    CreatePipelineRequest:
+      type: object
+      required: [project_id, name]
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineStage'
+        trigger:
+          type: string
+          enum: [manual, push, pr, schedule]
+          default: push
+        ai_suggest_stages:
+          type: boolean
+          default: true
+
+    UpdatePipelineRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineStage'
+        trigger:
+          type: string
+
+    PipelineRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pipeline_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, running, success, failed]
+        started_at:
+          type: string
+          format: date-time
+        commit_sha:
+          type: string
+
+    Deployment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        environment:
+          type: string
+          enum: [dev, staging, prod]
+        status:
+          type: string
+          enum: [pending, running, success, failed, rolled_back]
+        version:
+          type: string
+        triggered_by:
+          type: string
+          enum: [manual, pipeline, auto]
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        rollback_of:
+          type: string
+          format: uuid
+          nullable: true
+
+    CreateDeploymentRequest:
+      type: object
+      required: [project_id, environment]
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        environment:
+          type: string
+          enum: [dev, staging, prod]
+        version:
+          type: string
+        pipeline_run_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    Environment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [dev, staging, prod]
+        config:
+          type: object
+        requires_approval:
+          type: boolean
+
+    CreateEnvironmentRequest:
+      type: object
+      required: [project_id, name, type]
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [dev, staging, prod]
+        requires_approval:
+          type: boolean
+          default: false
+
+    ApprovalGate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        deployment_id:
+          type: string
+          format: uuid
+        environment:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        requested_by:
+          type: string
+          format: uuid
+        approvers:
+          type: array
+          items:
+            type: string
+            format: uuid
+        created_at:
+          type: string
+          format: date-time
+
+    ReleaseNotes:
+      type: object
+      properties:
+        deployment_id:
+          type: string
+          format: uuid
+        version:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        summary:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        bug_fixes:
+          type: array
+          items:
+            type: string
+        breaking_changes:
+          type: array
+          items:
+            type: string
+        full_markdown:
+          type: string

@@ -1,0 +1,378 @@
+openapi: "3.1.0"
+info:
+  title: Design & Architecture Service API
+  description: |
+    Tech stack recommendations, architecture diagram generation, API contract management, and DB schema generation.
+    SRS requirements: DES-001 through DES-005
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8004/api/v1
+
+tags:
+  - name: tech-stack
+  - name: diagrams
+  - name: contracts
+  - name: review
+  - name: database
+
+paths:
+
+  /design/tech-stack/recommend:
+    post:
+      tags: [tech-stack]
+      summary: "DES-001: AI tech stack recommendation"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, description]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                description:
+                  type: string
+                scale:
+                  type: string
+                  enum: [small, medium, large, enterprise]
+                team_size:
+                  type: integer
+                existing_stack:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Recommended tech stacks with rationale
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TechStackRecommendation'
+
+  /design/architecture/generate-diagram:
+    post:
+      tags: [diagrams]
+      summary: "DES-002: Generate architecture diagram (UML, C4, ER)"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, diagram_type]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                diagram_type:
+                  type: string
+                  enum: [c4_context, c4_container, c4_component, er, uml_class, sequence, deployment]
+                source:
+                  type: string
+                  enum: [requirements, code, specification]
+                  default: requirements
+      responses:
+        "202":
+          description: Diagram generation queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramJob'
+
+  /design/architecture/diagrams/{project_id}:
+    get:
+      tags: [diagrams]
+      summary: List generated diagrams for a project
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Diagram list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Diagram'
+
+  /design/api-contract/generate:
+    post:
+      tags: [contracts]
+      summary: "DES-003: Generate OpenAPI/Swagger contract from user stories"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, requirement_ids]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                requirement_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                format:
+                  type: string
+                  enum: [openapi3, swagger2]
+                  default: openapi3
+      responses:
+        "200":
+          description: Generated API contract
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIContract'
+
+  /design/projects/{project_id}/contracts:
+    get:
+      tags: [contracts]
+      summary: List API contracts for a project
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Contract list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/APIContract'
+
+  /design/review:
+    post:
+      tags: [review]
+      summary: "DES-004: AI review of design documents"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, document_url]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                document_url:
+                  type: string
+                  format: uri
+                review_dimensions:
+                  type: array
+                  items:
+                    type: string
+                    enum: [scalability, security, best_practices, performance, maintainability]
+                  default: [scalability, security, best_practices]
+      responses:
+        "200":
+          description: Design review findings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesignReview'
+
+  /design/database-schema/generate:
+    post:
+      tags: [database]
+      summary: "DES-005: Generate normalized DB schema from entity descriptions"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, entities]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                entities:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      description:
+                        type: string
+                      attributes:
+                        type: array
+                        items:
+                          type: string
+                target_db:
+                  type: string
+                  enum: [postgresql, mysql, mongodb]
+                  default: postgresql
+      responses:
+        "200":
+          description: Generated schema SQL/JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseSchema'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    TechStackRecommendation:
+      type: object
+      properties:
+        recommendations:
+          type: array
+          items:
+            type: object
+            properties:
+              stack_name:
+                type: string
+              components:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    layer:
+                      type: string
+                    technology:
+                      type: string
+                    rationale:
+                      type: string
+              confidence_score:
+                type: number
+              pros:
+                type: array
+                items:
+                  type: string
+              cons:
+                type: array
+                items:
+                  type: string
+
+    DiagramJob:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, running, completed, failed]
+
+    Diagram:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        diagram_type:
+          type: string
+        s3_url:
+          type: string
+          format: uri
+        format:
+          type: string
+          enum: [svg, png, mermaid, plantuml]
+        generated_at:
+          type: string
+          format: date-time
+
+    APIContract:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        version:
+          type: string
+        format:
+          type: string
+        spec_url:
+          type: string
+          format: uri
+        generated_at:
+          type: string
+          format: date-time
+
+    DesignReview:
+      type: object
+      properties:
+        findings:
+          type: array
+          items:
+            type: object
+            properties:
+              dimension:
+                type: string
+              severity:
+                type: string
+                enum: [critical, high, medium, low, info]
+              finding:
+                type: string
+              recommendation:
+                type: string
+        overall_score:
+          type: number
+        reviewed_at:
+          type: string
+          format: date-time
+
+    DatabaseSchema:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        target_db:
+          type: string
+        sql_ddl:
+          type: string
+          nullable: true
+        schema_json:
+          type: object
+          nullable: true
+        s3_url:
+          type: string
+          format: uri
+        generated_at:
+          type: string
+          format: date-time
