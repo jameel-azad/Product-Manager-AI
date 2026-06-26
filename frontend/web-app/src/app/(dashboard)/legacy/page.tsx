@@ -126,7 +126,7 @@ export default function LegacyPage() {
     project_id: '',
     source_language: 'COBOL',
     target_language: 'Java',
-    code: '',
+    source_code: '',
   });
   const [converting, setConverting] = useState(false);
 
@@ -257,15 +257,15 @@ export default function LegacyPage() {
           <label className="block text-xs font-medium text-slate-400 mb-1.5">Legacy Code</label>
           <textarea
             rows={8}
-            value={form.code}
-            onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
+            value={form.source_code}
+            onChange={e => setForm(f => ({ ...f, source_code: e.target.value }))}
             placeholder={`Paste your ${form.source_language} code here...`}
             className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono resize-y"
           />
         </div>
         <button
           onClick={handleConvert}
-          disabled={!form.code.trim() || converting}
+          disabled={!form.source_code.trim() || converting}
           className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
         >
           {converting ? (

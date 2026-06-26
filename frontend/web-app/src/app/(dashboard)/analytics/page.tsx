@@ -74,7 +74,7 @@ export default function AnalyticsPage() {
             { label: 'Total Projects', value: summary.total_projects ?? projects.length },
             { label: 'Requirements', value: summary.total_requirements ?? '—' },
             { label: 'AI Jobs Run', value: summary.total_ai_jobs ?? '—' },
-            { label: 'Deployments', value: summary.recent_deployments ?? '—' },
+            { label: 'Deployments', value: summary.recent_deployments?.length ?? '—' },
           ].map(s => (
             <div key={s.label} className="bg-[#0f172a] border border-slate-800 rounded-xl p-4">
               <p className="text-slate-500 text-xs mb-1">{s.label}</p>

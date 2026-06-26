@@ -353,7 +353,7 @@ export default function ExtractionPage() {
           ) : (
             <RadixTabs.Root value={activeTab} onValueChange={setActiveTab}>
               {/* Tab list */}
-              <div className="flex border-b border-slate-800 overflow-x-auto">
+              <RadixTabs.List className="flex border-b border-slate-800 overflow-x-auto">
                 {[
                   { value: 'brd', label: 'Business Rules Document', icon: <FileText className="w-3.5 h-3.5" />, id: 'BEX-002' },
                   { value: 'flows', label: 'Process Flows', icon: <Workflow className="w-3.5 h-3.5" />, id: 'BEX-003' },
@@ -370,7 +370,7 @@ export default function ExtractionPage() {
                     <span className="text-[9px] text-slate-600 font-mono">{tab.id}</span>
                   </RadixTabs.Trigger>
                 ))}
-              </div>
+              </RadixTabs.List>
 
               {/* BRD Tab */}
               <RadixTabs.Content value="brd" className="p-5">
