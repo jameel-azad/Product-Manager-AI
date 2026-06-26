@@ -11,7 +11,7 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from database import init_db, AsyncSessionLocal
+from database import init_db, AsyncSessionLocal, _is_sqlite
 from routers import (
     auth,
     projects,
@@ -33,8 +33,18 @@ log = structlog.get_logger()
 from auth import hash_password  # noqa: E402 — after sys path is set
 
 
+def _upsert_sql(table: str, columns: list[str]) -> str:
+    """Return an INSERT-or-skip statement compatible with both SQLite and PostgreSQL."""
+    cols = ", ".join(columns)
+    placeholders = ", ".join(f":{c}" for c in columns)
+    if _is_sqlite:
+        return f"INSERT OR IGNORE INTO {table} ({cols}) VALUES ({placeholders})"
+    # PostgreSQL: ON CONFLICT (id) DO NOTHING — assumes 'id' is the PK
+    return f"INSERT INTO {table} ({cols}) VALUES ({placeholders}) ON CONFLICT (id) DO NOTHING"
+
+
 async def seed_demo_data() -> None:
-    """Seed the database with demo data on first start. Uses INSERT OR IGNORE / upsert logic."""
+    """Seed the database with demo data on first start. Uses upsert logic (cross-DB compatible)."""
     from sqlalchemy import text
 
     async with AsyncSessionLocal() as session:
@@ -45,15 +55,14 @@ async def seed_demo_data() -> None:
         # ------------------------------------------------------------------
         await session.execute(
             text(
-                """
-                INSERT OR IGNORE INTO organizations (id, name, slug, plan, is_active, created_at, updated_at)
-                VALUES (:id, :name, :slug, 'enterprise', 1, :created_at, :updated_at)
-                """
+                _upsert_sql("organizations", ["id", "name", "slug", "plan", "is_active", "created_at", "updated_at"])
             ),
             {
                 "id": "org-demo-001",
                 "name": "Xccelera AI",
                 "slug": "xccelera-ai",
+                "plan": "enterprise",
+                "is_active": True,
                 "created_at": now,
                 "updated_at": now,
             },
@@ -64,12 +73,7 @@ async def seed_demo_data() -> None:
         # ------------------------------------------------------------------
         await session.execute(
             text(
-                """
-                INSERT OR IGNORE INTO users
-                    (id, email, full_name, role, password_hash, org_id, is_active, mfa_enabled, created_at, updated_at)
-                VALUES
-                    (:id, :email, :full_name, :role, :password_hash, :org_id, 1, 0, :created_at, :updated_at)
-                """
+                _upsert_sql("users", ["id", "email", "full_name", "role", "password_hash", "org_id", "is_active", "mfa_enabled", "created_at", "updated_at"])
             ),
             {
                 "id": "user-admin-001",
@@ -78,6 +82,8 @@ async def seed_demo_data() -> None:
                 "role": "project_manager",
                 "password_hash": hash_password("demo123"),
                 "org_id": "org-demo-001",
+                "is_active": True,
+                "mfa_enabled": False,
                 "created_at": now,
                 "updated_at": now,
             },
@@ -88,12 +94,7 @@ async def seed_demo_data() -> None:
         # ------------------------------------------------------------------
         await session.execute(
             text(
-                """
-                INSERT OR IGNORE INTO users
-                    (id, email, full_name, role, password_hash, org_id, is_active, mfa_enabled, created_at, updated_at)
-                VALUES
-                    (:id, :email, :full_name, :role, :password_hash, :org_id, 1, 0, :created_at, :updated_at)
-                """
+                _upsert_sql("users", ["id", "email", "full_name", "role", "password_hash", "org_id", "is_active", "mfa_enabled", "created_at", "updated_at"])
             ),
             {
                 "id": "user-dev-001",
@@ -102,6 +103,8 @@ async def seed_demo_data() -> None:
                 "role": "developer",
                 "password_hash": hash_password("demo123"),
                 "org_id": "org-demo-001",
+                "is_active": True,
+                "mfa_enabled": False,
                 "created_at": now,
                 "updated_at": now,
             },
@@ -143,12 +146,7 @@ async def seed_demo_data() -> None:
         for proj in projects_seed:
             await session.execute(
                 text(
-                    """
-                    INSERT OR IGNORE INTO projects
-                        (id, name, description, status, tech_stack, owner_id, org_id, created_at, updated_at)
-                    VALUES
-                        (:id, :name, :description, :status, :tech_stack, :owner_id, :org_id, :created_at, :updated_at)
-                    """
+                    _upsert_sql("projects", ["id", "name", "description", "status", "tech_stack", "owner_id", "org_id", "created_at", "updated_at"])
                 ),
                 {**proj, "created_at": now, "updated_at": now},
             )
@@ -207,16 +205,10 @@ async def seed_demo_data() -> None:
         for req in requirements_seed:
             await session.execute(
                 text(
-                    """
-                    INSERT OR IGNORE INTO requirements
-                        (id, project_id, org_id, title, description, priority, status,
-                         acceptance_criteria, version, ai_generated, created_by, created_at, updated_at)
-                    VALUES
-                        (:id, :project_id, :org_id, :title, :description, :priority, :status,
-                         '[]', 1, 0, :created_by, :created_at, :updated_at)
-                    """
+                    _upsert_sql("requirements", ["id", "project_id", "org_id", "title", "description", "priority", "status",
+                                                  "acceptance_criteria", "version", "ai_generated", "created_by", "created_at", "updated_at"])
                 ),
-                {**req, "created_by": "user-admin-001", "created_at": now, "updated_at": now},
+                {**req, "acceptance_criteria": "[]", "version": 1, "ai_generated": False, "created_by": "user-admin-001", "created_at": now, "updated_at": now},
             )
 
         # ------------------------------------------------------------------
@@ -261,16 +253,10 @@ async def seed_demo_data() -> None:
         for job in ai_jobs_seed:
             await session.execute(
                 text(
-                    """
-                    INSERT OR IGNORE INTO ai_jobs
-                        (id, org_id, project_id, engine, trigger_source, status, priority,
-                         payload, result, attempt_count, created_at, updated_at)
-                    VALUES
-                        (:id, :org_id, :project_id, :engine, :trigger_source, :status, :priority,
-                         :payload, :result, 1, :created_at, :updated_at)
-                    """
+                    _upsert_sql("ai_jobs", ["id", "org_id", "project_id", "engine", "trigger_source", "status", "priority",
+                                            "payload", "result", "attempt_count", "created_at", "updated_at"])
                 ),
-                {**job, "created_at": now, "updated_at": now},
+                {**job, "attempt_count": 1, "created_at": now, "updated_at": now},
             )
 
         # ------------------------------------------------------------------
@@ -312,12 +298,7 @@ async def seed_demo_data() -> None:
         for evt in mee_events_seed:
             await session.execute(
                 text(
-                    """
-                    INSERT OR IGNORE INTO mee_events
-                        (id, org_id, project_id, engine, event_type, severity, description, event_metadata, created_at)
-                    VALUES
-                        (:id, :org_id, :project_id, :engine, :event_type, :severity, :description, :event_metadata, :created_at)
-                    """
+                    _upsert_sql("mee_events", ["id", "org_id", "project_id", "engine", "event_type", "severity", "description", "event_metadata", "created_at"])
                 ),
                 {**evt, "created_at": now},
             )
@@ -355,12 +336,7 @@ async def seed_demo_data() -> None:
         for dep in deployments_seed:
             await session.execute(
                 text(
-                    """
-                    INSERT OR IGNORE INTO deployments
-                        (id, project_id, environment, version, status, triggered_by, created_at)
-                    VALUES
-                        (:id, :project_id, :environment, :version, :status, :triggered_by, :created_at)
-                    """
+                    _upsert_sql("deployments", ["id", "project_id", "environment", "version", "status", "triggered_by", "created_at"])
                 ),
                 {**dep, "created_at": now},
             )
@@ -406,16 +382,10 @@ async def seed_demo_data() -> None:
         for tc in test_cases_seed:
             await session.execute(
                 text(
-                    """
-                    INSERT OR IGNORE INTO test_cases
-                        (id, project_id, title, description, type, expected_result,
-                         steps, ai_generated, created_at)
-                    VALUES
-                        (:id, :project_id, :title, :description, :type, :expected_result,
-                         '[]', 0, :created_at)
-                    """
+                    _upsert_sql("test_cases", ["id", "project_id", "title", "description", "type", "expected_result",
+                                               "steps", "ai_generated", "created_at"])
                 ),
-                {**tc, "created_at": now},
+                {**tc, "steps": "[]", "ai_generated": False, "created_at": now},
             )
 
         test_runs_seed = [
@@ -444,12 +414,7 @@ async def seed_demo_data() -> None:
         for tr in test_runs_seed:
             await session.execute(
                 text(
-                    """
-                    INSERT OR IGNORE INTO test_runs
-                        (id, project_id, status, total_cases, passed, failed, skipped, coverage_pct, created_at)
-                    VALUES
-                        (:id, :project_id, :status, :total_cases, :passed, :failed, :skipped, :coverage_pct, :created_at)
-                    """
+                    _upsert_sql("test_runs", ["id", "project_id", "status", "total_cases", "passed", "failed", "skipped", "coverage_pct", "created_at"])
                 ),
                 {**tr, "created_at": now},
             )
@@ -513,16 +478,10 @@ async def seed_demo_data() -> None:
         for ag in agents_seed:
             await session.execute(
                 text(
-                    """
-                    INSERT OR IGNORE INTO agent_records
-                        (id, org_id, name, description, status, version, capabilities, tools,
-                         mee_enabled, owner_id, created_at, updated_at)
-                    VALUES
-                        (:id, :org_id, :name, :description, :status, :version, :capabilities, :tools,
-                         1, :owner_id, :created_at, :updated_at)
-                    """
+                    _upsert_sql("agent_records", ["id", "org_id", "name", "description", "status", "version", "capabilities", "tools",
+                                                   "mee_enabled", "owner_id", "created_at", "updated_at"])
                 ),
-                {**ag, "owner_id": "user-admin-001", "created_at": now, "updated_at": now},
+                {**ag, "mee_enabled": True, "owner_id": "user-admin-001", "created_at": now, "updated_at": now},
             )
 
         await session.commit()

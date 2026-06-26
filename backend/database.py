@@ -1,6 +1,9 @@
 """
 Xccelera AI-SDLC Platform — async SQLAlchemy database setup.
-Uses aiosqlite (SQLite) for the demo environment.
+
+Supports two backends (selected via the DATABASE_URL env var):
+  - SQLite + aiosqlite  (local development, the default)
+  - PostgreSQL + asyncpg (production / Cloud SQL on GCP)
 """
 
 import os
@@ -21,12 +24,14 @@ DATABASE_URL = os.getenv(
     "sqlite+aiosqlite:///./xccelera_demo.db",
 )
 
+_is_sqlite = "sqlite" in DATABASE_URL
+
 engine = create_async_engine(
     DATABASE_URL,
     echo=bool(os.getenv("DB_ECHO", "")),
     future=True,
-    # SQLite-specific: enable WAL mode for better concurrency
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
+    # SQLite needs check_same_thread=False; PostgreSQL ignores connect_args
+    connect_args={"check_same_thread": False} if _is_sqlite else {},
 )
 
 # ---------------------------------------------------------------------------
@@ -81,9 +86,10 @@ async def get_db() -> AsyncSession:  # type: ignore[return]
 async def init_db() -> None:
     """
     Create all tables defined in Base.metadata if they do not already exist.
-    Call once at application startup (e.g. inside an @app.on_event("startup")).
+    Call once at application startup (e.g. inside a lifespan context manager).
 
     For SQLite, also enables WAL journal mode for better concurrent access.
+    PostgreSQL requires no special pragmas.
     """
     # Import all models so their metadata is registered before create_all
     from models import (  # noqa: F401 — side-effect import
@@ -111,7 +117,8 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
     # Enable WAL mode on SQLite for concurrent read/write
-    if "sqlite" in DATABASE_URL:
+    if _is_sqlite:
         async with engine.connect() as conn:
             await conn.exec_driver_sql("PRAGMA journal_mode=WAL")
             await conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+
